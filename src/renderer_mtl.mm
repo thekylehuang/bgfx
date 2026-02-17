@@ -3437,6 +3437,43 @@ BX_PRAGMA_DIAGNOSTIC_POP();
 		releaseBackBuffer();
 	}
 
+	void setupMetalLayer(PlatformData& pd)
+	{
+		NSObject* nvh = (NSObject*)pd.nwh;
+		if ([nvh isKindOfClass:[CAMetalLayer class]])
+		{
+			return;
+		}
+
+		NSView* contentView = nil;
+		if ([nvh isKindOfClass:[NSView class]])
+		{
+			contentView = (NSView*)nvh;
+		}
+		else if ([nvh isKindOfClass:[NSWindow class]])
+		{
+			contentView = [(NSWindow*)nvh contentView];
+		}
+		else
+		{
+			BX_WARN(0, "Unable to create Metal layer. Invalid platform data.");
+			return;
+		}
+
+		CALayer* layer = contentView.layer;
+		if (NULL != layer && [layer isKindOfClass:NSClassFromString(@"CAMetalLayer")])
+		{
+			pd.nwh = layer;
+		}
+		else
+		{
+			[contentView setWantsLayer:YES];
+			CAMetalLayer* metalLayer = [CAMetalLayer layer];
+			[contentView setLayer:metalLayer];
+			pd.nwh = metalLayer;
+		}
+	}
+
 	void SwapChainMtl::init(void* _nwh)
 	{
 		{
@@ -3456,7 +3493,7 @@ BX_PRAGMA_DIAGNOSTIC_POP();
 			if (NULL != NSClassFromString(@"CAMetalLayer") )
 			{
 				if (NULL == m_metalLayer)
-#	if BX_PLATFORM_IOS || BX_PLATFORM_VISIONOS
+#	if BX_PLATFORM_IOS || BX_PLATFORM_VISIONOS || BX_PLATFORM_OSX
 				{
 					CAMetalLayer* metalLayer = (CAMetalLayer*)_nwh;
 					if (NULL == metalLayer
@@ -3467,68 +3504,6 @@ BX_PRAGMA_DIAGNOSTIC_POP();
 					}
 
 					m_metalLayer = metalLayer;
-				}
-#	elif BX_PLATFORM_OSX
-				{
-					NSObject* nvh = (NSObject*)_nwh;
-					if ([nvh isKindOfClass:[CAMetalLayer class]])
-					{
-						CAMetalLayer* metalLayer = (CAMetalLayer*)_nwh;
-						m_metalLayer = metalLayer;
-					}
-					else
-					{
-						NSView *contentView;
-
-						if ([nvh isKindOfClass:[NSView class]])
-						{
-							contentView = (NSView*)nvh;
-						}
-						else if ([nvh isKindOfClass:[NSWindow class]])
-						{
-							NSWindow* nsWindow = (NSWindow*)nvh;
-							contentView = [nsWindow contentView];
-						}
-						else
-						{
-							BX_WARN(0, "Unable to create Metal device. Please set platform data window to an NSWindow, NSView, or CAMetalLayer");
-							return;
-						}
-
-						void (^setLayer)(void) =
-						^{
-							CALayer* layer = contentView.layer;
-
-							if(NULL != layer && [layer isKindOfClass:NSClassFromString(@"CAMetalLayer")])
-							{
-								m_metalLayer = (CAMetalLayer*)layer;
-							}
-							else
-							{
-								[contentView setWantsLayer: YES];
-								m_metalLayer = [CAMetalLayer layer];
-								[contentView setLayer:m_metalLayer];
-							}
-						};
-
-						if ([NSThread isMainThread])
-						{
-							setLayer();
-						}
-						else
-						{
-							bx::Semaphore semaphore;
-							bx::Semaphore* psemaphore = &semaphore;
-
-							CFRunLoopPerformBlock([[NSRunLoop mainRunLoop] getCFRunLoop], kCFRunLoopCommonModes,
-							^{
-								setLayer();
-								psemaphore->post();
-							});
-
-							semaphore.wait();
-						}
-					}
 				}
 #	endif // BX_PLATFORM_*
 			}

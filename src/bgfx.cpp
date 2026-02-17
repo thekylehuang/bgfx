@@ -1972,6 +1972,10 @@ namespace bgfx
 		TextureFormat::RGBA8, // D3D9 doesn't support RGBA8
 	};
 
+#if BX_PLATFORM_OSX
+	namespace mtl { void setupMetalLayer(PlatformData &pd); }
+#endif
+
 	bool Context::init(const Init& _init)
 	{
 		if (m_rendererInitialized)
@@ -2006,6 +2010,10 @@ namespace bgfx
 		dump(m_init.resolution);
 
 		bx::memCopy(&g_platformData, &m_init.platformData, sizeof(PlatformData) );
+
+#if BX_PLATFORM_OSX
+		mtl::setupMetalLayer(g_platformData);
+#endif
 
 		m_exit    = false;
 		m_flipped = true;
