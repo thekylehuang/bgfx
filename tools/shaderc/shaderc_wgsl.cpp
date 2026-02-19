@@ -5,6 +5,8 @@
 
 #include "shaderc.h"
 
+#if SHADERC_CONFIG_HAS_TINT && SHADERC_CONFIG_HAS_GLSLANG
+
 #include <iostream> // std::cout
 
 BX_PRAGMA_DIAGNOSTIC_PUSH()
@@ -939,3 +941,18 @@ namespace bgfx { namespace wgsl
 	}
 
 } // namespace bgfx
+
+#else // SHADERC_CONFIG_HAS_TINT && SHADERC_CONFIG_HAS_GLSLANG
+
+namespace bgfx
+{
+	bool compileWgslShader(const Options& _options, uint32_t _version, const std::string& _code, bx::WriterI* _shaderWriter, bx::WriterI* _messageWriter)
+	{
+		BX_UNUSED(_options, _version, _code, _shaderWriter);
+		bx::Error messageErr;
+		bx::write(_messageWriter, &messageErr, "WGSL compiler (tint) is not compiled in.\n");
+		return false;
+	}
+} // namespace bgfx
+
+#endif // SHADERC_CONFIG_HAS_TINT && SHADERC_CONFIG_HAS_GLSLANG
