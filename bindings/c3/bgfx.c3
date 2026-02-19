@@ -465,6 +465,9 @@ enum TextureFlags : const ulong
 	// Texture will be used for read back from GPU.
 	READBACK               = 0x0000800000000000,
 
+	// Texture is shared with other device or other process.
+	EXTERNALSHARED         = 0x0001000000000000,
+
 	// Render target MSAAx2 mode.
 	RTMSAAX2               = 0x0000002000000000,
 
@@ -711,32 +714,38 @@ enum CapsFlags : const ulong
 	// CPU direct access to GPU texture memory.
 	TEXTUREDIRECTACCESS    = 0x0000000000400000,
 
+	// External texture is supported.
+	TEXTUREEXTERNAL        = 0x0000000000800000,
+
+	// External shared texture is supported.
+	TEXTUREEXTERNALSHARED  = 0x0000000001000000,
+
 	// Read-back texture is supported.
-	TEXTUREREADBACK        = 0x0000000000800000,
+	TEXTUREREADBACK        = 0x0000000002000000,
 
 	// 2D texture array is supported.
-	TEXTURE_2DARRAY        = 0x0000000001000000,
+	TEXTURE_2DARRAY        = 0x0000000004000000,
 
 	// 3D textures are supported.
-	TEXTURE_3D             = 0x0000000002000000,
+	TEXTURE_3D             = 0x0000000008000000,
 
 	// Transparent back buffer supported.
-	TRANSPARENTBACKBUFFER  = 0x0000000004000000,
+	TRANSPARENTBACKBUFFER  = 0x0000000010000000,
 
 	// Variable Rate Shading
-	VARIABLERATESHADING    = 0x0000000008000000,
+	VARIABLERATESHADING    = 0x0000000020000000,
 
 	// Vertex attribute half-float is supported.
-	VERTEXATTRIBHALF       = 0x0000000010000000,
+	VERTEXATTRIBHALF       = 0x0000000040000000,
 
 	// Vertex attribute 10_10_10_2 is supported.
-	VERTEXATTRIBUINT10     = 0x0000000020000000,
+	VERTEXATTRIBUINT10     = 0x0000000080000000,
 
 	// Rendering with VertexID only is supported.
-	VERTEXID               = 0x0000000040000000,
+	VERTEXID               = 0x0000000100000000,
 
 	// Viewport layer is available in vertex shader.
-	VIEWPORTLAYERARRAY     = 0x0000000080000000,
+	VIEWPORTLAYERARRAY     = 0x0000000200000000,
 
 	// All texture compare modes are supported.
 	TEXTURECOMPAREALL      = 0x0000000000180000,
@@ -851,6 +860,18 @@ enum CubeMapFlags : const uint
 
 	// Cubemap -z.
 	NEGATIVEZ              = 0x00000005,
+}
+
+enum FrameFlags : const uint
+{
+	// No frame flags.
+	NONE                   = 0x00000000,
+
+	// Capture frame with graphics debugger.
+	DEBUGCAPTURE           = 0x00000001,
+
+	// Discard all draw calls.
+	DISCARD                = 0x00000002,
 }
 
 enum Fatal : uint
@@ -1512,6 +1533,8 @@ struct PlatformData
 	// GL context, D3D device, or Vulkan device. If `NULL`, bgfx
 	// will create context/device.
 	void* context;
+	// D3D12 Queue. If `NULL` bgfx will create queue.
+	void* queue;
 	// GL back-buffer, or D3D render target view. If `NULL` bgfx will
 	// create back-buffer color surface.
 	void* backBuffer;
@@ -2025,8 +2048,8 @@ extern fn void reset(uint _width, uint _height, uint _flags, TextureFormat _form
 // Advance to next frame. When using multithreaded renderer, this call
 // just swaps internal buffers, kicks render thread, and returns. In
 // singlethreaded renderer this call does frame rendering.
-// _capture : `Capture frame with graphics debugger.`
-extern fn uint frame(bool _capture) @extern("bgfx_frame");
+// _flags : `Frame flags. See: `BGFX_FRAME_*` for more info.   - `BGFX_FRAME_NONE` - No frame flag.   - `BGFX_FRAME_DEBUG_CAPTURE` - Capture frame with graphics debugger.   - `BGFX_FRAME_DISCARD` - Discard all draw calls.`
+extern fn uint frame(char _flags) @extern("bgfx_frame");
 
 // Returns current renderer backend API type.
 // @remarks
@@ -2321,7 +2344,8 @@ extern fn TextureHandle create_texture(Memory* _mem, ulong _flags, char _skip, T
 // _format : `Texture format. See: `TextureFormat::Enum`.`
 // _flags : `Texture creation (see `BGFX_TEXTURE_*`.), and sampler (see `BGFX_SAMPLER_*`) flags. Default texture sampling mode is linear, and wrap mode is repeat. - `BGFX_SAMPLER_[U/V/W]_[MIRROR/CLAMP]` - Mirror or clamp to edge wrap   mode. - `BGFX_SAMPLER_[MIN/MAG/MIP]_[POINT/ANISOTROPIC]` - Point or anisotropic   sampling.`
 // _mem : `Texture data. If `_mem` is non-NULL, created texture will be immutable. If `_mem` is NULL content of the texture is uninitialized. When `_numLayers` is more than 1, expected memory layout is texture and all mips together for each array element.`
-extern fn TextureHandle create_texture_2d(ushort _width, ushort _height, bool _hasMips, ushort _numLayers, TextureFormat _format, ulong _flags, Memory* _mem) @extern("bgfx_create_texture_2d");
+// _external : `Native API pointer to texture.`
+extern fn TextureHandle create_texture_2d(ushort _width, ushort _height, bool _hasMips, ushort _numLayers, TextureFormat _format, ulong _flags, Memory* _mem, ulong _external) @extern("bgfx_create_texture_2d");
 
 // Create texture with size based on back-buffer ratio. Texture will maintain ratio
 // if back buffer resolution changes.
@@ -2340,7 +2364,8 @@ extern fn TextureHandle create_texture_2d_scaled(BackbufferRatio _ratio, bool _h
 // _format : `Texture format. See: `TextureFormat::Enum`.`
 // _flags : `Texture creation (see `BGFX_TEXTURE_*`.), and sampler (see `BGFX_SAMPLER_*`) flags. Default texture sampling mode is linear, and wrap mode is repeat. - `BGFX_SAMPLER_[U/V/W]_[MIRROR/CLAMP]` - Mirror or clamp to edge wrap   mode. - `BGFX_SAMPLER_[MIN/MAG/MIP]_[POINT/ANISOTROPIC]` - Point or anisotropic   sampling.`
 // _mem : `Texture data. If `_mem` is non-NULL, created texture will be immutable. If `_mem` is NULL content of the texture is uninitialized. When `_numLayers` is more than 1, expected memory layout is texture and all mips together for each array element.`
-extern fn TextureHandle create_texture_3d(ushort _width, ushort _height, ushort _depth, bool _hasMips, TextureFormat _format, ulong _flags, Memory* _mem) @extern("bgfx_create_texture_3d");
+// _external : `Native API pointer to texture.`
+extern fn TextureHandle create_texture_3d(ushort _width, ushort _height, ushort _depth, bool _hasMips, TextureFormat _format, ulong _flags, Memory* _mem, ulong _external) @extern("bgfx_create_texture_3d");
 
 // Create Cube texture.
 // _size : `Cube side size.`
@@ -2348,8 +2373,9 @@ extern fn TextureHandle create_texture_3d(ushort _width, ushort _height, ushort 
 // _numLayers : `Number of layers in texture array. Must be 1 if caps `BGFX_CAPS_TEXTURE_2D_ARRAY` flag is not set.`
 // _format : `Texture format. See: `TextureFormat::Enum`.`
 // _flags : `Texture creation (see `BGFX_TEXTURE_*`.), and sampler (see `BGFX_SAMPLER_*`) flags. Default texture sampling mode is linear, and wrap mode is repeat. - `BGFX_SAMPLER_[U/V/W]_[MIRROR/CLAMP]` - Mirror or clamp to edge wrap   mode. - `BGFX_SAMPLER_[MIN/MAG/MIP]_[POINT/ANISOTROPIC]` - Point or anisotropic   sampling.`
-// _mem : `Texture data. If `_mem` is non-NULL, created texture will be immutable. If `_mem` is NULL content of the texture is uninitialized. When `_numLayers` is more than 1, expected memory layout is texture and all mips together for each array element.`
-extern fn TextureHandle create_texture_cube(ushort _size, bool _hasMips, ushort _numLayers, TextureFormat _format, ulong _flags, Memory* _mem) @extern("bgfx_create_texture_cube");
+// _mem : `Texture data. If `_mem` is non-NULL, created texture will be immutable. If `_mem` is NULL content of the texture is uninitialized. When `_numLayers` is more than`
+// _external : `Native API pointer to texture.`
+extern fn TextureHandle create_texture_cube(ushort _size, bool _hasMips, ushort _numLayers, TextureFormat _format, ulong _flags, Memory* _mem, ulong _external) @extern("bgfx_create_texture_cube");
 
 // Update 2D texture.
 // @attention It's valid to update only mutable texture. See `bgfx::createTexture2D` for more info.

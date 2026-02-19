@@ -6,7 +6,7 @@
 #include "shaderc.h"
 #include <bx/os.h>
 
-#if SHADERC_CONFIG_DXIL
+#if SHADERC_CONFIG_HAS_DXC
 
 #if BX_PLATFORM_WINDOWS
 #	include <windows.h>
@@ -682,7 +682,7 @@ namespace bgfx { namespace dxil
 
 } // namespace bgfx
 
-#else
+#else // SHADERC_CONFIG_HAS_DXC
 
 namespace bgfx
 {
@@ -690,10 +690,10 @@ namespace bgfx
 	{
 		BX_UNUSED(_options, _version, _code, _shaderWriter);
 		bx::Error messageErr;
-		bx::write(_messageWriter, &messageErr, "DXIL compiler is not supported on this platform.\n");
+		bx::write(_messageWriter, &messageErr, "DXIL compiler is not compiled in or not supported on this platform.\n");
 		return false;
 	}
 
 } // namespace bgfx
 
-#endif // SHADERC_CONFIG_DXIL
+#endif // SHADERC_CONFIG_HAS_DXC

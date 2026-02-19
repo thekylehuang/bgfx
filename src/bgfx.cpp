@@ -473,7 +473,7 @@ namespace bgfx
 		bx::write(&writer, tc, bx::ErrorAssert{});
 
 		rci->destroyTexture(_handle);
-		rci->createTexture(_handle, mem, _flags, 0);
+		rci->createTexture(_handle, mem, _flags, 0, 0);
 
 		release(mem);
 
@@ -1631,6 +1631,8 @@ namespace bgfx
 		CAPS_FLAGS(BGFX_CAPS_TEXTURE_COMPARE_LEQUAL),
 		CAPS_FLAGS(BGFX_CAPS_TEXTURE_CUBE_ARRAY),
 		CAPS_FLAGS(BGFX_CAPS_TEXTURE_DIRECT_ACCESS),
+		CAPS_FLAGS(BGFX_CAPS_TEXTURE_EXTERNAL),
+		CAPS_FLAGS(BGFX_CAPS_TEXTURE_EXTERNAL_SHARED),
 		CAPS_FLAGS(BGFX_CAPS_TEXTURE_READ_BACK),
 		CAPS_FLAGS(BGFX_CAPS_TRANSPARENT_BACKBUFFER),
 		CAPS_FLAGS(BGFX_CAPS_VARIABLE_RATE_SHADING),
@@ -2406,7 +2408,7 @@ namespace bgfx
 #endif // BGFX_CONFIG_MULTITHREADED
 	}
 
-	uint32_t Context::frame(bool _capture)
+	uint32_t Context::frame(uint8_t _flags)
 	{
 		m_encoder[0].end(true);
 
@@ -2419,7 +2421,12 @@ namespace bgfx
 		encoderApiWait();
 #endif // BGFX_CONFIG_MULTITHREADED
 
-		m_submit->m_capture = _capture;
+		if (0 != (_flags & BGFX_FRAME_DISCARD) )
+		{
+			m_submit->m_numRenderItems = 0;
+		}
+
+		m_submit->m_capture = 0 != (_flags & BGFX_FRAME_DEBUG_CAPTURE);
 
 		uint32_t frameNum = m_submit->m_frameNum;
 
@@ -3301,7 +3308,11 @@ namespace bgfx
 					uint8_t skip;
 					_cmdbuf.read(skip);
 
-					void* ptr = m_renderCtx->createTexture(handle, mem, flags, skip);
+					uintptr_t external;
+					_cmdbuf.read(external);
+
+					void* ptr = m_renderCtx->createTexture(handle, mem, flags, skip, external);
+
 					if (NULL != ptr)
 					{
 						setDirectAccessPtr(handle, ptr);
@@ -3607,6 +3618,7 @@ namespace bgfx
 		: ndt(NULL)
 		, nwh(NULL)
 		, context(NULL)
+		, queue(NULL)
 		, backBuffer(NULL)
 		, backBufferDS(NULL)
 		, type(NativeWindowHandleType::Default)
@@ -4235,10 +4247,10 @@ namespace bgfx
 		s_ctx->end(_encoder);
 	}
 
-	uint32_t frame(bool _capture)
+	uint32_t frame(uint8_t _flags)
 	{
 		BGFX_CHECK_API_THREAD();
-		return s_ctx->frame(_capture);
+		return s_ctx->frame(_flags);
 	}
 
 	const Caps* getCaps()
@@ -5005,7 +5017,7 @@ namespace bgfx
 	TextureHandle createTexture(const Memory* _mem, uint64_t _flags, uint8_t _skip, TextureInfo* _info)
 	{
 		BX_ASSERT(NULL != _mem, "_mem can't be NULL");
-		return s_ctx->createTexture(_mem, _flags, _skip, _info, BackbufferRatio::Count, false);
+		return s_ctx->createTexture(_mem, _flags, _skip, _info, BackbufferRatio::Count, false, 0);
 	}
 
 	void getTextureSizeFromRatio(BackbufferRatio::Enum _ratio, uint16_t& _width, uint16_t& _height)
@@ -5026,7 +5038,17 @@ namespace bgfx
 		_height = bx::max<uint16_t>(1, _height);
 	}
 
-	static TextureHandle createTexture2D(BackbufferRatio::Enum _ratio, uint16_t _width, uint16_t _height, bool _hasMips, uint16_t _numLayers, TextureFormat::Enum _format, uint64_t _flags, const Memory* _mem)
+	static TextureHandle createTexture2D(
+		  BackbufferRatio::Enum _ratio
+		, uint16_t _width
+		, uint16_t _height
+		, bool _hasMips
+		, uint16_t _numLayers
+		, TextureFormat::Enum _format
+		, uint64_t _flags
+		, const Memory* _mem
+		, uint64_t _external
+		)
 	{
 		if (BackbufferRatio::Count != _ratio)
 		{
@@ -5075,23 +5097,36 @@ namespace bgfx
 		tc.m_mem       = _mem;
 		bx::write(&writer, tc, bx::ErrorAssert{});
 
-		return s_ctx->createTexture(mem, _flags, 0, NULL, _ratio, NULL != _mem);
+		return s_ctx->createTexture(mem, _flags, 0, NULL, _ratio, NULL != _mem, _external);
 	}
 
-	TextureHandle createTexture2D(uint16_t _width, uint16_t _height, bool _hasMips, uint16_t _numLayers, TextureFormat::Enum _format, uint64_t _flags, const Memory* _mem)
+	TextureHandle createTexture2D(uint16_t _width, uint16_t _height, bool _hasMips, uint16_t _numLayers, TextureFormat::Enum _format, uint64_t _flags, const Memory* _mem, uint64_t _external)
 	{
+		BX_ASSERT(false
+			|| 0 == _external
+			|| 0 != (g_caps.supported & BGFX_CAPS_TEXTURE_EXTERNAL)
+			, "External texture is not supported! "
+			  "Use bgfx::getCaps to check `BGFX_CAPS_TEXTURE_EXTERNAL` backend renderer capabilities."
+			);
 		BX_ASSERT(_width > 0 && _height > 0, "Invalid texture size (width %d, height %d).", _width, _height);
-		return createTexture2D(BackbufferRatio::Count, _width, _height, _hasMips, _numLayers, _format, _flags, _mem);
+		return createTexture2D(BackbufferRatio::Count, _width, _height, _hasMips, _numLayers, _format, _flags, _mem, _external);
 	}
 
 	TextureHandle createTexture2D(BackbufferRatio::Enum _ratio, bool _hasMips, uint16_t _numLayers, TextureFormat::Enum _format, uint64_t _flags)
 	{
 		BX_ASSERT(_ratio < BackbufferRatio::Count, "Invalid back buffer ratio.");
-		return createTexture2D(_ratio, 0, 0, _hasMips, _numLayers, _format, _flags, NULL);
+		return createTexture2D(_ratio, 0, 0, _hasMips, _numLayers, _format, _flags, NULL, 0);
 	}
 
-	TextureHandle createTexture3D(uint16_t _width, uint16_t _height, uint16_t _depth, bool _hasMips, TextureFormat::Enum _format, uint64_t _flags, const Memory* _mem)
+	TextureHandle createTexture3D(uint16_t _width, uint16_t _height, uint16_t _depth, bool _hasMips, TextureFormat::Enum _format, uint64_t _flags, const Memory* _mem, uint64_t _external)
 	{
+		BX_ASSERT(false
+			|| 0 == _external
+			|| 0 != (g_caps.supported & BGFX_CAPS_TEXTURE_EXTERNAL)
+			, "External texture is not supported! "
+			  "Use bgfx::getCaps to check `BGFX_CAPS_TEXTURE_EXTERNAL` backend renderer capabilities."
+			);
+
 		bx::ErrorAssert err;
 		isTextureValid(_width, _height, _depth, false, 1, _format, _flags, &err);
 
@@ -5131,11 +5166,18 @@ namespace bgfx
 		tc.m_mem       = _mem;
 		bx::write(&writer, tc, bx::ErrorAssert{});
 
-		return s_ctx->createTexture(mem, _flags, 0, NULL, BackbufferRatio::Count, NULL != _mem);
+		return s_ctx->createTexture(mem, _flags, 0, NULL, BackbufferRatio::Count, NULL != _mem, _external);
 	}
 
-	TextureHandle createTextureCube(uint16_t _size, bool _hasMips, uint16_t _numLayers, TextureFormat::Enum _format, uint64_t _flags, const Memory* _mem)
+	TextureHandle createTextureCube(uint16_t _size, bool _hasMips, uint16_t _numLayers, TextureFormat::Enum _format, uint64_t _flags, const Memory* _mem, uint64_t _external)
 	{
+		BX_ASSERT(false
+			|| 0 == _external
+			|| 0 != (g_caps.supported & BGFX_CAPS_TEXTURE_EXTERNAL)
+			, "External texture is not supported! "
+			  "Use bgfx::getCaps to check `BGFX_CAPS_TEXTURE_EXTERNAL` backend renderer capabilities."
+			);
+
 		bx::ErrorAssert err;
 		isTextureValid(_size, _size, 0, true, _numLayers, _format, _flags, &err);
 
@@ -5176,7 +5218,7 @@ namespace bgfx
 		tc.m_mem       = _mem;
 		bx::write(&writer, tc, bx::ErrorAssert{});
 
-		return s_ctx->createTexture(mem, _flags, 0, NULL, BackbufferRatio::Count, NULL != _mem);
+		return s_ctx->createTexture(mem, _flags, 0, NULL, BackbufferRatio::Count, NULL != _mem, _external);
 	}
 
 	void setName(TextureHandle _handle, const char* _name, int32_t _len)
@@ -6007,6 +6049,8 @@ static_assert( (0
 	| BGFX_CAPS_TEXTURE_BLIT
 	| BGFX_CAPS_TEXTURE_CUBE_ARRAY
 	| BGFX_CAPS_TEXTURE_DIRECT_ACCESS
+	| BGFX_CAPS_TEXTURE_EXTERNAL
+	| BGFX_CAPS_TEXTURE_EXTERNAL_SHARED
 	| BGFX_CAPS_TEXTURE_READ_BACK
 	| BGFX_CAPS_VERTEX_ATTRIB_HALF
 	| BGFX_CAPS_VERTEX_ATTRIB_UINT10
@@ -6035,6 +6079,8 @@ static_assert( (0
 	^ BGFX_CAPS_TEXTURE_BLIT
 	^ BGFX_CAPS_TEXTURE_CUBE_ARRAY
 	^ BGFX_CAPS_TEXTURE_DIRECT_ACCESS
+	^ BGFX_CAPS_TEXTURE_EXTERNAL
+	^ BGFX_CAPS_TEXTURE_EXTERNAL_SHARED
 	^ BGFX_CAPS_TEXTURE_READ_BACK
 	^ BGFX_CAPS_VERTEX_ATTRIB_HALF
 	^ BGFX_CAPS_VERTEX_ATTRIB_UINT10

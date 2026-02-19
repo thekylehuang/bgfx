@@ -5,7 +5,7 @@
 
 #include "shaderc.h"
 
-#if SHADERC_CONFIG_HLSL
+#if SHADERC_CONFIG_HAS_D3DCOMPILER
 
 #if defined(__MINGW32__)
 #	define __REQUIRED_RPCNDR_H_VERSION__ 475
@@ -757,7 +757,7 @@ namespace bgfx { namespace hlsl
 
 } // namespace bgfx
 
-#else
+#else // SHADERC_CONFIG_HAS_D3DCOMPILER
 
 namespace bgfx
 {
@@ -765,10 +765,16 @@ namespace bgfx
 	{
 		BX_UNUSED(_options, _version, _code, _shaderWriter);
 		bx::Error messageErr;
+#if BX_PLATFORM_WINDOWS
+		bx::write(_messageWriter, &messageErr, "HLSL compiler support is not compiled in.\n");
+#elif BX_PLATFORM_LINUX
+		bx::write(_messageWriter, &messageErr, "HLSL compiler support through D3D4Linux is not compiled in.\n");
+#else
 		bx::write(_messageWriter, &messageErr, "HLSL compiler is not supported on this platform.\n");
+#endif
 		return false;
 	}
 
 } // namespace bgfx
 
-#endif // SHADERC_CONFIG_HLSL
+#endif // SHADERC_CONFIG_HAS_D3DCOMPILER

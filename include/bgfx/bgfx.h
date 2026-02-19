@@ -685,6 +685,7 @@ namespace bgfx
 		                                   ///  context/device, provided the rendering API supports it.
 		void* context;                     //!< GL context, D3D device, or Vulkan device. If `NULL`, bgfx
 		                                   ///  will create context/device.
+		void* queue;                       ///
 		void* backBuffer;                  //!< GL back-buffer, or D3D render target view. If `NULL` bgfx will
 		                                   ///  create back-buffer color surface.
 		void* backBufferDS;                //!< Backbuffer depth/stencil. If `NULL`, bgfx will create a back-buffer
@@ -2131,7 +2132,7 @@ namespace bgfx
 	/// just swaps internal buffers, kicks render thread, and returns. In
 	/// singlethreaded renderer this call does frame rendering.
 	///
-	/// @param[in] _capture Capture frame with graphics debugger.
+	/// @param[in] _flags Frame flags. See: `BGFX_FRAME_*`.
 	///
 	/// @returns Current frame number. This might be used in conjunction with
 	///   double/multi buffering data outside the library and passing it to
@@ -2139,7 +2140,7 @@ namespace bgfx
 	///
 	/// @attention C99's equivalent binding is `bgfx_frame`.
 	///
-	uint32_t frame(bool _capture = false);
+	uint32_t frame(uint8_t _flags = BGFX_FRAME_NONE);
 
 	/// Returns current renderer backend API type.
 	///
@@ -2856,6 +2857,7 @@ namespace bgfx
 	/// @param[in] _mem Texture data. If `_mem` is non-NULL, created texture will be immutable. If
 	///   `_mem` is NULL content of the texture is uninitialized. When `_numLayers` is more than
 	///   1, expected memory layout is texture and all mips together for each array element.
+	/// @param[in] _external Native API pointer to texture.
 	///
 	/// @attention C99's equivalent binding is `bgfx_create_texture_2d`.
 	///
@@ -2867,6 +2869,7 @@ namespace bgfx
 		, TextureFormat::Enum _format
 		, uint64_t _flags = BGFX_TEXTURE_NONE|BGFX_SAMPLER_NONE
 		, const Memory* _mem = NULL
+		, uint64_t _external = 0
 		);
 
 	/// Create texture with size based on back-buffer ratio. Texture will maintain ratio
@@ -2911,6 +2914,7 @@ namespace bgfx
 	///
 	/// @param[in] _mem Texture data. If `_mem` is non-NULL, created texture will be immutable. If
 	///   `_mem` is NULL content of the texture is uninitialized.
+	/// @param[in] _external Native API pointer to texture.
 	///
 	/// @attention C99's equivalent binding is `bgfx_create_texture_3d`.
 	///
@@ -2922,6 +2926,7 @@ namespace bgfx
 		, TextureFormat::Enum _format
 		, uint64_t _flags = BGFX_TEXTURE_NONE|BGFX_SAMPLER_NONE
 		, const Memory* _mem = NULL
+		, uint64_t _external = 0
 		);
 
 	/// Create Cube texture.
@@ -2941,6 +2946,7 @@ namespace bgfx
 	/// @param[in] _mem Texture data. If `_mem` is non-NULL, created texture will be immutable. If
 	///   `_mem` is NULL content of the texture is uninitialized. When `_numLayers` is more than
 	///   1, expected memory layout is texture and all mips together for each array element.
+	/// @param[in] _external Native API pointer to texture.
 	///
 	/// @attention C99's equivalent binding is `bgfx_create_texture_cube`.
 	///
@@ -2951,6 +2957,7 @@ namespace bgfx
 		, TextureFormat::Enum _format
 		, uint64_t _flags = BGFX_TEXTURE_NONE|BGFX_SAMPLER_NONE
 		, const Memory* _mem = NULL
+		, uint64_t _external = 0
 		);
 
 	/// Update 2D texture.
